@@ -1,0 +1,14 @@
+{
+  "name": "basis",
+  "version": "0.1.0",
+  "description": "Rust implementation of a native linear algebra node module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics"
+  },
+  "author": "Shane Murphy",
+  "license": "MIT",
+  "devDependencies": {
+    "cargo-cp-artifact": "^0.1.4"
+  }
+}
