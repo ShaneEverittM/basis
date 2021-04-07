@@ -1,3 +1,5 @@
+mod math;
+
 use neon::prelude::*;
 use neon::result::Throw;
 
@@ -12,7 +14,7 @@ fn parse_number_arg(cx: &mut FunctionContext, idx: i32) -> Result<f64, Throw> {
 pub fn add(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let x = parse_number_arg(&mut cx, 0)?;
     let y = parse_number_arg(&mut cx, 1)?;
-    Ok(cx.number(x + y))
+    Ok(cx.number(math::add(x, y)))
 }
 
 #[neon::main]
