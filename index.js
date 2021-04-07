@@ -1,5 +1,5 @@
 // Pull in native module that we have no information about
-const basis = require('./basis.node')
+const basis = require('./build/basis.node')
 
 
 // Create thin wrappers that give Node context and WebStorm autocomplete
