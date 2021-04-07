@@ -1,4 +1,4 @@
-pub fn add(x: f64, y: f64) -> f64 { x + y }
+pub fn add(x: u64, y: u64) -> u64 { x + y }
 
 #[cfg(test)]
 mod tests {
@@ -6,6 +6,6 @@ mod tests {
 
     #[test]
     fn add_test() {
-        assert!((3f64 - add(1f64, 2f64)).abs() < f64::EPSILON)
+        assert_eq!(3, add(1, 2))
     }
 }

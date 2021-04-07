@@ -12,9 +12,9 @@ fn parse_number_arg(cx: &mut FunctionContext, idx: i32) -> Result<f64, Throw> {
 }
 
 pub fn add(mut cx: FunctionContext) -> JsResult<JsNumber> {
-    let x = parse_number_arg(&mut cx, 0)?;
-    let y = parse_number_arg(&mut cx, 1)?;
-    Ok(cx.number(math::add(x, y)))
+    let x = parse_number_arg(&mut cx, 0)? as u64;
+    let y = parse_number_arg(&mut cx, 1)? as u64;
+    Ok(cx.number(math::add(x, y) as f64))
 }
 
 #[neon::main]
