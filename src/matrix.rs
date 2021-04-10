@@ -1,6 +1,4 @@
-pub fn add(x: u64, y: u64) -> u64 {
-    x + y
-}
+#![allow(dead_code)]
 
 use anyhow::{anyhow, Error};
 
@@ -131,10 +129,7 @@ pub fn transpose(v: Vec<Num>, width: Dim, depth: Dim) -> Vec<Num> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
-    fn add_test() {
-        assert_eq!(3, add(1, 2))
-    }
+    fn add_test() {}
 }
