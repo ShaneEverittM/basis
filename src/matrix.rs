@@ -96,7 +96,7 @@ pub fn hadamard_product(
 // Helper function to convert vector index to i and j coordinates
 pub fn index_to_coordinates(idx: usize, d: usize) -> (usize, usize) {
     let i = idx / d + 1;
-    let j = idx - i;
+    let j = d - ((i * d) - idx) + 1;
     (i, j)
 }
 
@@ -123,6 +123,85 @@ pub fn transpose(v: Vec<Num>, width: Dim, depth: Dim) -> Vec<Num> {
 
         // Push the corresponding value to the new transposed matrix
         res.push(v[trans_idx]);
+    }
+    res
+}
+
+// Dot product helper for multiplication
+pub fn dot_product(mat_a: &[Num], mat_b: &[Num], i: Dim, j: Dim, len: &Dim) -> Num {
+    let mut x;
+    let mut y;
+    let mut sum: Num = 0;
+    // Normal dot product, multiply all numbers on a row of A and a column of B and keep a running sum
+    for idx in 0..*len {
+        x = coordinates_to_index(idx, j);
+        y = coordinates_to_index(i, idx);
+        sum += mat_a[x] * mat_b[y];
+    }
+    sum
+}
+
+// Traditional matrix multiplication
+pub fn matrix_multiplication(
+    a: &[Num],
+    b: &[Num],
+    width_a: &Dim,
+    depth_a: Dim,
+    width_b: Dim,
+    depth_b: &Dim,
+) -> Result<Vec<Num>, Error> {
+    let mut res: Vec<Num> = Vec::with_capacity(depth_a * width_b);
+
+    // The width of the first input needs to match the depth of the second input
+    if depth_b != width_a {
+        Err(anyhow!("matrices must be identical dimensions"))
+    } else {
+        for rows in 0..depth_a {
+            for cols in 0..width_b {
+                res.push(dot_product(a, b, rows, cols, width_a));
+            }
+        }
+        Ok(res)
+    }
+}
+
+// Matrix power
+pub fn power(a: &[Num], width: &Dim, depth: Dim, pwr: Num) -> Vec<Num> {
+    let mut res: Vec<Num> = Vec::with_capacity(depth * width);
+
+    // First copy A into the result so it can be multiplied by itself (A * A)
+    // This will help for further powers
+    for idx in a {
+        res.push(*idx);
+    }
+
+    // Now execute the power multiplication, will only execute once for squared
+    let mut count = 1;
+    loop {
+        if count == pwr - 1 {
+            break;
+        }
+        res = matrix_multiplication(&res, a, width, depth, *width, &depth).unwrap();
+        count += 1;
+    }
+    res
+}
+
+// Generate an identity matrix for the provided matrix dimensions
+pub fn generate_identity(n: Dim) -> Vec<Num> {
+    let mut res: Vec<Num> = Vec::with_capacity(n * n);
+
+    let mut i;
+    let mut j;
+    let size = n * n;
+    for idx in 0..size {
+        i = index_to_coordinates(idx, n).0;
+        j = index_to_coordinates(idx, n).1;
+        if i == j {
+            res.push(1);
+        } else {
+            res.push(0);
+        }
     }
     res
 }
