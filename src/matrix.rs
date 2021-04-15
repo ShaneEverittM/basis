@@ -1,104 +1,116 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Error};
-use std::ops::{Add, Deref, DerefMut, Index};
+use std::fmt::{Debug, Formatter, Display};
+use std::ops::{Add, AddAssign, Deref, DerefMut, Mul};
 
 type Num = i32;
 type Dim = usize;
 
-#[derive(Debug)]
-struct Matrix<T: Sized + Copy + Default, const R: usize, const C: usize> {
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Matrix<T: Copy + PartialEq, const R: usize, const C: usize> {
     elements: [[T; C]; R],
 }
 
-impl<T: Sized + Copy + Default, const R: usize, const C: usize> Matrix<T, R, C> {
-    pub fn new(mut elements: Vec<T>) -> Self {
-        let mut rows = [[T::default(); C]; R];
-        for (i, slice) in elements.chunks_mut(C).enumerate() {
-            let mut x = [T::default(); C];
-            for (i, e) in slice.iter_mut().enumerate() {
-                x[i] = *e;
+impl<T: Copy + PartialEq + Display, const R: usize, const C: usize> Display for Matrix<T, R, C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for row in self.iter() {
+            for e in row.iter() {
+                f.write_fmt(format_args!("{}, ", e))?;
             }
-            rows[i] = x;
+            f.write_str("\n")?;
         }
-
-        Self { elements: rows }
+        Ok(())
     }
+}
 
-    pub fn new_unsafe(elements: Vec<T>) -> Self {
-        Self {
-            elements: unsafe { *(elements.as_ptr() as *mut [[T; C]; R]) },
+impl<T: Copy, const R: usize, const C: usize> Eq for Matrix<T, C, R> where T: Eq {}
+
+impl<T: Copy + PartialEq, const R: usize, const C: usize> Matrix<T, R, C> {
+    pub fn from_vec(elements: Vec<T>) -> Result<Self, Error> {
+        if R * C != elements.len() {
+            Err(anyhow!(
+                "Rows times columns must equal the length of the input elements"
+            ))
+        } else {
+            Ok(Self {
+                // SAFETY: ptr is not null because it came from a Vec which maintains
+                // the invariant that its inner ptr is non-null
+                elements: unsafe { *(elements.as_ptr() as *mut [[T; C]; R]) },
+            })
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl<T: Copy + PartialEq, const R: usize, const C: usize> Deref for Matrix<T, R, C> {
+    type Target = [[T; C]; R];
 
-    #[test]
-    fn add_test() {
-        let elements = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let m = unsafe { Matrix::<i32, 3, 3>::new_unsafe(elements) };
-        dbg!(m);
+    fn deref(&self) -> &Self::Target {
+        &self.elements
     }
 }
 
-//
-// impl Matrix {
-//     pub fn from_vec(cols: usize, rows: usize, elements: Vec<i32>) -> Self {
-//         Self {
-//             cols,
-//             rows,
-//             elements,
-//         }
-//     }
-// }
+impl<T: Copy + PartialEq, const R: usize, const C: usize> DerefMut for Matrix<T, R, C> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.elements
+    }
+}
 
-// impl Deref for Matrix {
-//     type Target = Vec<i32>;
-//
-//     fn deref(&self) -> &Self::Target {
-//         &self.elements
-//     }
-// }
-//
-// impl DerefMut for Matrix {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.elements
-//     }
-// }
-//
-// impl Index<[usize; 2]> for Matrix {
-//     type Output = i32;
-//
-//     fn index(&self, index: [usize; 2]) -> &Self::Output {
-//         &self.elements[index[0] * self.cols + index[1]]
-//     }
-// }
-//
-// impl Add<Matrix> for Matrix {
-//     type Output = Matrix;
-//
-//     fn add(self, rhs: Self) -> Self::Output {
-//         let elements = self.iter().zip(rhs.iter()).map(|(x, y)| x + y).collect();
-//         Matrix::from_vec(self.rows, self.cols, elements)
-//     }
-// }
-//
-// impl FromIterator<i32> for Matrix {
-//     fn from_iter<T: IntoIterator<Item = i32>>(iter: T) -> Self {
-//         let e: Vec<i32> = iter.into_iter().collect();
-//         Self::from_vec(0, 0, e)
-//     }
-// }
+impl<T, const R: usize, const C: usize> Add<Matrix<T, R, C>> for Matrix<T, R, C>
+where
+    T: Copy + PartialEq + Add<Output = T>,
+{
+    type Output = Matrix<T, R, C>;
 
-// impl Add<i32> for Matrix {
-//     type Output = Matrix;
-//
-//     fn add(self, rhs: i32) -> Self::Output {
-//     }
-// }
+    fn add(self, rhs: Self) -> Self::Output {
+        Matrix::from_vec(
+            self.iter()
+                .flatten()
+                .zip(rhs.iter().flatten())
+                .map(|(&e1, &e2)| e1 + e2)
+                .collect(),
+        )
+        .expect("Sum of matrices should be correctly sized")
+    }
+}
+
+impl<T, const R: usize, const C: usize> Add<T> for Matrix<T, R, C>
+where
+    T: Copy + PartialEq + Add<Output = T>,
+{
+    type Output = Matrix<T, R, C>;
+
+    fn add(self, rhs: T) -> Self::Output {
+        Matrix::from_vec(self.iter().flatten().map(|&e1| e1 + rhs).collect())
+            .expect("Sum of matrices should be correctly sized")
+    }
+}
+
+impl<T, const R: usize, const C: usize> AddAssign<T> for Matrix<T, R, C>
+where
+    T: Copy + PartialEq + AddAssign,
+{
+    fn add_assign(&mut self, rhs: T) {
+        self.iter_mut().flatten().for_each(|e1| {
+            *e1 += rhs;
+        });
+    }
+}
+impl<T, const R: usize, const C: usize> Matrix<T, R, C>
+where
+    T: Copy + PartialEq + Mul<Output = T>,
+{
+    pub fn hadamard_product(&self, other: &Matrix<T, R, C>) -> Matrix<T, R, C> {
+        Matrix::from_vec(
+            self.iter()
+                .flatten()
+                .zip(other.iter().flatten())
+                .map(|(&x, &y)| x * y)
+                .collect(),
+        )
+        .unwrap()
+    }
+}
 
 // Want to merely change the argument, think I did that right with a mutable reference?
 // Scalar addition of a value x to the matrix
@@ -299,4 +311,19 @@ pub fn generate_identity(n: Dim) -> Vec<Num> {
         }
     }
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_test() {
+        let e1 = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let e2 = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let m1 = Matrix::<_, 4, 2>::from_vec(e1).unwrap();
+        let m2 = Matrix::<_, 4, 2>::from_vec(e2).unwrap();
+        let m3 = m1.hadamard_product(&m2);
+        println!("{}", m3);
+    }
 }
