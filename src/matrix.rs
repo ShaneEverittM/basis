@@ -5,7 +5,9 @@ use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num_traits::{One, Zero};
+use num_traits::{Bounded, One, Zero};
+use std::convert::{TryFrom, TryInto};
+use std::iter::Sum;
 
 type Num = i32;
 type Dim = usize;
@@ -18,7 +20,7 @@ pub struct Matrix<T> {
 }
 
 impl<T: Copy> Matrix<T> {
-    pub fn from_vec(elements: Vec<T>, rows: usize, cols: usize) -> Result<Self, Error> {
+    pub fn from_flat_vec(elements: Vec<T>, rows: usize, cols: usize) -> Result<Self, Error> {
         if rows * cols != elements.len() {
             return Err(anyhow!("Rows * columns must equal length of elements vec"));
         }
@@ -42,6 +44,33 @@ impl<T: Copy> Matrix<T> {
         })
     }
 
+    pub fn from_array<const R: usize, const C: usize>(slice: [[T; C]; R]) -> Self {
+        let elements: Vec<Vec<T>> = Vec::from(slice)
+            .iter_mut()
+            .map(|&mut row| Vec::from(row))
+            .collect();
+
+        Self {
+            elements,
+            rows: R,
+            cols: C,
+        }
+    }
+
+    pub fn from_vec(elements: Vec<Vec<T>>) -> Result<Self, Error> {
+        let rows = elements.len();
+        let cols = elements.first().unwrap().len();
+        if elements.iter().any(|r| r.len() != cols) {
+            Err(anyhow!("Bumpy matrix"))
+        } else {
+            Ok(Self {
+                elements,
+                rows,
+                cols,
+            })
+        }
+    }
+
     pub fn identity(n: usize) -> Self
     where
         T: One + Zero,
@@ -51,52 +80,44 @@ impl<T: Copy> Matrix<T> {
         let mut i;
         let mut j;
         for (idx, e) in res.iter_mut().enumerate() {
-            i = index_to_coordinates(idx, n).0;
-            j = index_to_coordinates(idx, n).1;
+            i = Matrix::<T>::index_to_coordinates(idx, n).0;
+            j = Matrix::<T>::index_to_coordinates(idx, n).1;
             if i == j {
                 *e = One::one();
             }
         }
-        Self::from_vec(res, n, n).unwrap()
+        Self::from_flat_vec(res, n, n).unwrap()
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = &Vec<T>> + '_ {
+        self.elements.iter()
+    }
+
+    pub fn cols(&self) -> impl Iterator<Item = &Vec<T>> + '_ {
+        let mut transpose = self.clone();
+        transpose.transpose();
+        self.elements.iter()
     }
 
     pub fn add(&self, rhs: &Self) -> Result<Self, Error>
     where
         T: Add<Output = T>,
     {
-        let (rows, cols) = self.dims_match(&rhs)?;
-        Matrix::from_vec(
-            self.iter()
-                .flatten()
-                .zip(rhs.iter().flatten())
-                .map(|(&e1, &e2)| e1 + e2)
-                .collect(),
-            rows,
-            cols,
-        )
+        self.element_wise_arith_op(rhs, Add::add)
     }
 
-    pub fn add_assign(&mut self, rhs: Self) -> Result<(), Error>
+    pub fn add_assign(&mut self, rhs: &Self) -> Result<(), Error>
     where
         T: AddAssign,
     {
-        self.dims_match(&rhs)?;
-        self.iter_mut()
-            .flatten()
-            .zip(rhs.iter().flatten())
-            .for_each(|(e1, &e2)| *e1 += e2);
-        Ok(())
+        self.element_wise_update_op(rhs, AddAssign::add_assign)
     }
 
-    pub fn scalar_add(self, rhs: T) -> Result<Self, Error>
+    pub fn scalar_add(&self, rhs: T) -> Self
     where
         T: Add<Output = T>,
     {
-        Matrix::from_vec(
-            self.iter().flatten().map(|&e1| e1 + rhs).collect(),
-            self.rows,
-            self.cols,
-        )
+        self.scalar_op(rhs, Add::add)
     }
 
     pub fn scalar_add_assign(&mut self, rhs: T)
@@ -108,136 +129,115 @@ impl<T: Copy> Matrix<T> {
         });
     }
 
-    pub fn sub(self, rhs: Self) -> Result<Self, Error>
+    pub fn sub(&self, rhs: &Self) -> Result<Self, Error>
     where
         T: Sub<Output = T>,
     {
-        let (rows, cols) = self.dims_match(&rhs)?;
-        Matrix::from_vec(
-            self.iter()
-                .flatten()
-                .zip(rhs.iter().flatten())
-                .map(|(&e1, &e2)| e1 - e2)
-                .collect(),
-            rows,
-            cols,
-        )
+        self.element_wise_arith_op(rhs, std::ops::Sub::sub)
     }
 
-    pub fn sub_assign(&mut self, rhs: Self) -> Result<(), Error>
+    pub fn sub_assign(&mut self, rhs: &Self) -> Result<(), Error>
     where
         T: SubAssign,
     {
-        self.dims_match(&rhs)?;
-        self.iter_mut()
-            .flatten()
-            .zip(rhs.iter().flatten())
-            .for_each(|(e1, &e2)| *e1 -= e2);
-        Ok(())
+        self.element_wise_update_op(rhs, SubAssign::sub_assign)
     }
 
-    pub fn scalar_sub(&self, rhs: T) -> Result<Self, Error>
+    pub fn scalar_sub(&self, rhs: T) -> Self
     where
         T: Sub<Output = T>,
     {
-        Matrix::from_vec(
-            self.iter().flatten().map(|&e1| e1 - rhs).collect(),
-            self.rows,
-            self.cols,
-        )
+        self.scalar_op(rhs, Sub::sub)
     }
 
     pub fn scalar_sub_assign(&mut self, rhs: T)
     where
         T: SubAssign,
     {
-        self.iter_mut().flatten().for_each(|e1| {
-            *e1 -= rhs;
-        });
+        self.scalar_update_op(rhs, SubAssign::sub_assign)
     }
 
-    pub fn mul(self, rhs: Self) -> Result<Self, Error>
+    pub fn scalar_mul(&self, rhs: T) -> Self
     where
         T: Mul<Output = T>,
     {
-        todo!()
-    }
-
-    pub fn mul_assign(&mut self, rhs: Self) -> Result<(), Error>
-    where
-        T: SubAssign,
-    {
-        todo!()
-    }
-
-    pub fn scalar_mul(&self, rhs: T) -> Result<Self, Error>
-    where
-        T: Mul<Output = T>,
-    {
-        Matrix::from_vec(
-            self.iter().flatten().map(|&e1| e1 * rhs).collect(),
-            self.rows,
-            self.cols,
-        )
+        self.scalar_op(rhs, Mul::mul)
     }
 
     pub fn scalar_mul_assign(&mut self, rhs: T)
     where
         T: MulAssign,
     {
-        self.iter_mut().flatten().for_each(|e1| {
-            *e1 *= rhs;
-        });
+        self.scalar_update_op(rhs, MulAssign::mul_assign)
     }
 
-    pub fn div(self, rhs: Self) -> Result<Self, Error>
+    pub fn scalar_div(&self, rhs: T) -> Self
     where
         T: Div<Output = T>,
     {
-        todo!()
-    }
-
-    pub fn div_assign(&mut self, rhs: Self) -> Result<(), Error>
-    where
-        T: DivAssign,
-    {
-        todo!()
-    }
-
-    pub fn scalar_div(&self, rhs: T) -> Result<Self, Error>
-    where
-        T: Div<Output = T>,
-    {
-        Matrix::from_vec(
-            self.iter().flatten().map(|&e1| e1 / rhs).collect(),
-            self.rows,
-            self.cols,
-        )
+        self.scalar_op(rhs, Div::div)
     }
 
     pub fn scalar_div_assign(&mut self, rhs: T)
     where
         T: DivAssign,
     {
-        self.iter_mut().flatten().for_each(|e1| {
-            *e1 /= rhs;
-        });
+        self.scalar_update_op(rhs, DivAssign::div_assign)
     }
 
     pub fn hadamard_product(&self, rhs: &Self) -> Result<Self, Error>
     where
         T: Mul<Output = T>,
     {
-        let (rows, cols) = self.dims_match(&rhs)?;
-        Matrix::from_vec(
-            self.iter()
-                .flatten()
-                .zip(rhs.iter().flatten())
-                .map(|(&x, &y)| x * y)
-                .collect(),
-            rows,
-            cols,
-        )
+        self.element_wise_arith_op(rhs, Mul::mul)
+    }
+
+    pub fn mul(&self, rhs: &Self) -> Result<Self, Error>
+    where
+        T: Mul<Output = T> + Sum,
+    {
+        let mut result = Vec::new();
+        for row in self.rows() {
+            let mut row_result: Vec<T> = Vec::new();
+            for col in rhs.cols() {
+                let new_row = row.iter().zip(col.iter()).map(|(&x, &y)| x * y).sum();
+                row_result.push(new_row);
+            }
+            result.push(row_result)
+        }
+        Matrix::try_from(result)
+    }
+
+    pub fn mul_assign(&mut self, rhs: &Self) -> Result<(), Error>
+    where
+        T: Mul<Output = T> + Sum,
+    {
+        // Have to create a copy here because in place multiplication is impossible
+        *self = self.clone().mul(&rhs)?;
+        Ok(())
+    }
+
+    pub fn exp(&self, power: isize) -> Result<Self, Error>
+    where
+        T: Mul<Output = T> + Sum + Zero + One + Bounded,
+    {
+        // Cannot use ranges in match on generics
+        #[allow(clippy::comparison_chain)]
+        if power > 0 {
+            let mut base = self.clone();
+
+            for _ in 0..power {
+                base.mul_assign(&self)?;
+            }
+
+            Ok(base)
+        } else if power < 0 {
+            let mut inverse = self.clone();
+            inverse.invert();
+            inverse.exp(power.abs())
+        } else {
+            Ok(Self::identity(self.rows))
+        }
     }
 
     pub fn transpose(&mut self) {
@@ -257,6 +257,55 @@ impl<T: Copy> Matrix<T> {
                 }
             }
         }
+    }
+
+    pub fn invert(&mut self) {
+        todo!()
+    }
+
+    fn element_wise_arith_op(&self, rhs: &Self, op: impl Fn(T, T) -> T) -> Result<Self, Error> {
+        self.dims_match(&rhs)?;
+
+        self.iter()
+            .zip(rhs.iter())
+            .map(|(row1, row2)| {
+                row1.iter()
+                    .zip(row2.iter())
+                    .map(|(&x, &y)| op(x, y))
+                    .collect::<Vec<T>>()
+            })
+            .collect::<Vec<Vec<T>>>()
+            .try_into()
+    }
+
+    fn element_wise_update_op(
+        &mut self,
+        rhs: &Self,
+        mut op: impl FnMut(&mut T, T),
+    ) -> Result<(), Error> {
+        self.dims_match(&rhs)?;
+
+        self.iter_mut()
+            .flatten()
+            .zip(rhs.iter().flatten())
+            .for_each(|(x, &y)| op(x, y));
+
+        Ok(())
+    }
+
+    fn scalar_op(&self, rhs: T, op: impl Fn(T, T) -> T) -> Self {
+        Self {
+            elements: self
+                .iter()
+                .map(|row| row.iter().map(|&e| op(e, rhs)).collect::<Vec<T>>())
+                .collect::<Vec<Vec<T>>>(),
+            rows: self.rows,
+            cols: self.cols,
+        }
+    }
+
+    fn scalar_update_op(&mut self, rhs: T, mut op: impl FnMut(&mut T, T)) {
+        self.iter_mut().flatten().for_each(|e| op(e, rhs))
     }
 
     fn dims_match(&self, other: &Self) -> Result<(usize, usize), Error> {
@@ -305,120 +354,93 @@ impl<T: Copy> DerefMut for Matrix<T> {
         &mut self.elements
     }
 }
-
-// Helper function to convert vector index to i and j coordinates
-pub fn index_to_coordinates(idx: usize, row_length: usize) -> (usize, usize) {
-    let i = idx / row_length + 1;
-    let j = row_length - ((i * row_length) - idx) + 1;
-    (i, j)
-}
-
-// Helper function to convert i and j to a vector index
-pub fn coordinates_to_index(i: usize, j: usize, row_length: usize) -> usize {
-    i * row_length + j
-}
-
-// Dot product helper for multiplication
-pub fn dot_product(mat_a: &[Num], mat_b: &[Num], i: Dim, j: Dim, len: Dim) -> Num {
-    let mut x;
-    let mut y;
-    let mut sum: Num = 0;
-    // Normal dot product, multiply all numbers on a row of A and a column of B and keep a running sum
-    for idx in 0..len {
-        x = coordinates_to_index(idx, j, len);
-        y = coordinates_to_index(i, idx, len);
-        sum += mat_a[x] * mat_b[y];
-    }
-    sum
-}
-
-// Traditional matrix multiplication
-pub fn matrix_multiplication(
-    a: &[Num],
-    b: &[Num],
-    width_a: &Dim,
-    depth_a: Dim,
-    width_b: Dim,
-    depth_b: &Dim,
-) -> Result<Vec<Num>, Error> {
-    let mut res: Vec<Num> = Vec::with_capacity(depth_a * width_b);
-
-    // The width of the first input needs to match the depth of the second input
-    if depth_b != width_a {
-        Err(anyhow!("matrices must be identical dimensions"))
-    } else {
-        for rows in 0..depth_a {
-            for cols in 0..width_b {
-                res.push(dot_product(a, b, rows, cols, *width_a));
-            }
-        }
-        Ok(res)
+impl<T: Copy, const R: usize, const C: usize> From<[[T; C]; R]> for Matrix<T> {
+    fn from(array: [[T; C]; R]) -> Self {
+        Self::from_array(array)
     }
 }
 
-// Matrix power
-pub fn power(a: &[Num], width: &Dim, depth: Dim, pwr: Num) -> Vec<Num> {
-    let mut res: Vec<Num> = Vec::with_capacity(depth * width);
+impl<T: Copy> TryFrom<Vec<Vec<T>>> for Matrix<T> {
+    type Error = Error;
 
-    // First copy A into the result so it can be multiplied by itself (A * A)
-    // This will help for further powers
-    for idx in a {
-        res.push(*idx);
+    fn try_from(value: Vec<Vec<T>>) -> Result<Self, Self::Error> {
+        Self::from_vec(value)
     }
-
-    // Now execute the power multiplication, will only execute once for squared
-    let mut count = 1;
-    loop {
-        if count == pwr - 1 {
-            break;
-        }
-        res = matrix_multiplication(&res, a, width, depth, *width, &depth).unwrap();
-        count += 1;
-    }
-    res
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(non_snake_case)]
     use super::*;
 
+    macro_rules! ok {
+        ($m:expr) => {{
+            let m = $m;
+            assert!(m.is_ok());
+            m.unwrap()
+        }};
+    }
+
     #[test]
-    fn addition() -> Result<(), Error> {
-        let e1 = vec![1, 2, 3, 4, 5, 6, 7, 8];
-        let e2 = vec![1, 2, 3, 4, 5, 6, 7, 8];
+    fn addition() {
+        let mut A = Matrix::from([[1, 2, 3, 4], [5, 6, 7, 8]]);
+        let B = Matrix::from([[8, 7, 6, 5], [4, 3, 2, 1]]);
 
-        let e3 = vec![2, 4, 6, 8, 10, 12, 14, 16];
+        let C = Matrix::from([[9, 9, 9, 9], [9, 9, 9, 9]]);
 
-        let m1 = Matrix::from_vec(e1, 2, 4)?;
-        let m2 = Matrix::from_vec(e2, 2, 4)?;
+        assert_eq!(C, ok!(A.add(&B)));
 
-        let m3 = Matrix::from_vec(e3, 2, 4)?;
+        ok!(A.add_assign(&B));
 
-        assert_eq!(m1, m2);
+        assert_eq!(A, C);
 
-        assert_eq!(m3, m1.add(&m2)?);
+        let scalar = 1;
 
-        Ok(())
+        let E = Matrix::from([[10, 10, 10, 10], [10, 10, 10, 10]]);
+
+        let D = C.scalar_add(scalar);
+
+        assert_eq!(D, E);
     }
 
     #[test]
     fn identity() {
-        let i = Matrix::<f64>::identity(5);
-        dbg!(i);
+        let identity = Matrix::identity(5);
+        let manual_identity = Matrix::from([
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 1],
+        ]);
+
+        assert_eq!(manual_identity, identity);
     }
 
     #[test]
     fn transpose() {
-        let m1_or_err = Matrix::from_vec(vec![1, 2, 3, 4], 2, 2);
-        let m2_or_err = Matrix::from_vec(vec![1, 3, 2, 4], 2, 2);
-
-        assert!(m1_or_err.is_ok());
-        assert!(m2_or_err.is_ok());
-
-        let mut m1 = m1_or_err.unwrap();
-        let m2 = m2_or_err.unwrap();
+        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
+        let m2 = Matrix::from([[1, 3], [2, 4]]);
 
         m1.transpose();
+
+        assert_eq!(m1, m2);
+    }
+
+    #[test]
+    fn multiply() {
+        let m1 = Matrix::from([[1, 2], [3, 4]]);
+        let m2 = Matrix::from([[1, 3], [2, 4]]);
+
+        let m3 = ok!(m1.mul(&m2));
+
+        dbg!(m3);
+    }
+
+    #[test]
+    fn from_vector() {
+        let m1 = ok!(Matrix::try_from(vec![vec![1, 2], vec![3, 4]]));
+        let m2 = Matrix::from([[1, 2], [3, 4]]);
 
         assert_eq!(m1, m2);
     }
