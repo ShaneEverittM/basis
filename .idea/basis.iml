@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/proc-macro2-8b9abb1f2fe6a9d7/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/syn-97fffeb15d587418/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/winapi-940c5b14f24f2b48/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/anyhow-16a5849087594881/out" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
     </content>

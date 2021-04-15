@@ -1,9 +1,104 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Error};
+use std::ops::{Add, Deref, DerefMut, Index};
 
 type Num = i32;
 type Dim = usize;
+
+#[derive(Debug)]
+struct Matrix<T: Sized + Copy + Default, const R: usize, const C: usize> {
+    elements: [[T; C]; R],
+}
+
+impl<T: Sized + Copy + Default, const R: usize, const C: usize> Matrix<T, R, C> {
+    pub fn new(mut elements: Vec<T>) -> Self {
+        let mut rows = [[T::default(); C]; R];
+        for (i, slice) in elements.chunks_mut(C).enumerate() {
+            let mut x = [T::default(); C];
+            for (i, e) in slice.iter_mut().enumerate() {
+                x[i] = *e;
+            }
+            rows[i] = x;
+        }
+
+        Self { elements: rows }
+    }
+
+    pub fn new_unsafe(elements: Vec<T>) -> Self {
+        Self {
+            elements: unsafe { *(elements.as_ptr() as *mut [[T; C]; R]) },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_test() {
+        let elements = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let m = unsafe { Matrix::<i32, 3, 3>::new_unsafe(elements) };
+        dbg!(m);
+    }
+}
+
+//
+// impl Matrix {
+//     pub fn from_vec(cols: usize, rows: usize, elements: Vec<i32>) -> Self {
+//         Self {
+//             cols,
+//             rows,
+//             elements,
+//         }
+//     }
+// }
+
+// impl Deref for Matrix {
+//     type Target = Vec<i32>;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.elements
+//     }
+// }
+//
+// impl DerefMut for Matrix {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.elements
+//     }
+// }
+//
+// impl Index<[usize; 2]> for Matrix {
+//     type Output = i32;
+//
+//     fn index(&self, index: [usize; 2]) -> &Self::Output {
+//         &self.elements[index[0] * self.cols + index[1]]
+//     }
+// }
+//
+// impl Add<Matrix> for Matrix {
+//     type Output = Matrix;
+//
+//     fn add(self, rhs: Self) -> Self::Output {
+//         let elements = self.iter().zip(rhs.iter()).map(|(x, y)| x + y).collect();
+//         Matrix::from_vec(self.rows, self.cols, elements)
+//     }
+// }
+//
+// impl FromIterator<i32> for Matrix {
+//     fn from_iter<T: IntoIterator<Item = i32>>(iter: T) -> Self {
+//         let e: Vec<i32> = iter.into_iter().collect();
+//         Self::from_vec(0, 0, e)
+//     }
+// }
+
+// impl Add<i32> for Matrix {
+//     type Output = Matrix;
+//
+//     fn add(self, rhs: i32) -> Self::Output {
+//     }
+// }
 
 // Want to merely change the argument, think I did that right with a mutable reference?
 // Scalar addition of a value x to the matrix
@@ -204,11 +299,4 @@ pub fn generate_identity(n: Dim) -> Vec<Num> {
         }
     }
     res
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn add_test() {}
 }
