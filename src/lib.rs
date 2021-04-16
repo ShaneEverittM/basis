@@ -1,4 +1,4 @@
-mod matrix;
+pub mod matrix;
 
 use neon::prelude::*;
 use neon::result::Throw;

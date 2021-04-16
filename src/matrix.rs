@@ -1,17 +1,11 @@
-#![allow(dead_code)]
-
-use anyhow::{anyhow, Error};
 use std::collections::VecDeque;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::{Iterator, Sum};
 use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num_traits::{Bounded, One, Zero};
-use std::convert::{TryFrom, TryInto};
-use std::iter::Iterator;
-use std::iter::Sum;
-
-type Num = i32;
-type Dim = usize;
+use anyhow::{anyhow, Error};
+use num_traits::{One, Zero};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<T> {
@@ -225,10 +219,9 @@ impl<T: Copy> Matrix<T> {
 
     pub fn exp(&self, power: isize) -> Result<Self, Error>
     where
-        T: Mul<Output = T> + Sum + Zero + One + Bounded,
+        T: Mul<Output = T> + Sum + Zero + One,
     {
         // Cannot use ranges in match on generics
-        #[allow(clippy::comparison_chain)]
         if power > 0 {
             let mut base = self.clone();
 
@@ -237,10 +230,14 @@ impl<T: Copy> Matrix<T> {
             }
 
             Ok(base)
-        } else if power < 0 {
+        } else if power < -1 {
             let mut inverse = self.clone();
             inverse.invert();
             inverse.exp(power.abs())
+        } else if power == -1 {
+            let mut inverse = self.clone();
+            inverse.invert();
+            Ok(inverse)
         } else {
             Ok(Self::identity(self.rows))
         }
@@ -250,7 +247,7 @@ impl<T: Copy> Matrix<T> {
         for i in 0..self.rows {
             for j in 0..self.cols {
                 if j < i {
-                    // SAFETY x and y are aligned, non-null and non-overlapping.
+                    // SAFETY: x and y are aligned, non-null and non-overlapping.
                     // The swap will incur no re-allocations or moves so Vec will not be
                     // disturbed.
                     unsafe {
@@ -324,13 +321,9 @@ impl<T: Copy> Matrix<T> {
     }
 
     fn index_to_coordinates(idx: usize, row_length: usize) -> (usize, usize) {
-        let i = idx / row_length + 1;
-        let j = row_length - ((i * row_length) - idx) + 1;
+        let i = idx / row_length;
+        let j = row_length - ((i * row_length) - idx);
         (i, j)
-    }
-
-    fn coordinates_to_index(i: usize, j: usize, row_length: usize) -> usize {
-        i * row_length + j
     }
 }
 
