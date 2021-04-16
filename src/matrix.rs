@@ -208,7 +208,114 @@ pub fn generate_identity(n: Dim) -> Vec<Num> {
 
 #[cfg(test)]
 mod tests {
+    use crate::matrix::{matrix_addition, matrix_subtraction, scalar_addition, scalar_subtraction, scalar_multiplication, power, matrix_multiplication, generate_identity, transpose};
 
     #[test]
-    fn add_test() {}
+    fn add_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let b = vec![7, 8, 9, 5, 6, 4, 3, 1, 2];
+        let width_b = 3;
+        let depth_b = 3;
+        let c_check = vec![8, 10, 12, 9, 11, 10, 10, 9, 11];
+        let c = matrix_addition(a, b, width_a, depth_a, width_b, depth_b).unwrap();
+        assert_eq!(c, c_check);
+    }
+
+    #[test]
+    fn sub_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let b = vec![7, 8, 9, 5, 6, 4, 3, 1, 2];
+        let width_b = 3;
+        let depth_b = 3;
+        let c_check = vec![-6, -6, -6, -1, -1, 2, 4, 7, 7];
+        let c = matrix_subtraction(a, b, width_a, depth_a, width_b, depth_b).unwrap();
+        assert_eq!(c, c_check);
+    }
+
+    #[test]
+    fn scalar_add_test() {
+        let mut a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let x = 4;
+        let c_check = vec![5, 7, 8, 8, 9, 10, 11, 12, 13];
+        scalar_addition(&mut a, x);
+        assert_eq!(a, c_check);
+    }
+
+    #[test]
+    fn scalar_sub_test() {
+        let mut a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let x = 5;
+        let c_check = vec![-4, -3, -2, -1, 0, 1, 2, 3, 4];
+        scalar_subtraction(&mut a, x);
+        assert_eq!(a, c_check);
+    }
+
+    #[test]
+    fn scalar_mul_test() {
+        let mut a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let x = 2;
+        let c_check = vec![2, 4, 6, 8, 10, 12, 14, 16, 18];
+        scalar_multiplication(&mut a, x);
+        assert_eq!(a, c_check);
+    }
+
+    #[test]
+    fn power_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let x = 2;
+        let c_check = vec![30, 36, 42, 66, 81, 96, 104, 126, 150];
+        let c = power(&a, &width_a, depth_a, x);
+        assert_eq!(c, c_check);
+    }
+
+    #[test]
+    fn hadamard_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let b = vec![7, 8, 9, 5, 6, 4, 3, 1, 2];
+        let width_b = 3;
+        let depth_b = 3;
+        let c_check = vec![7, 16, 27, 20, 30, 24, 21, 8, 18];
+        let c = matrix_multiplication(&a, &b, &width_a, depth_a, width_b, &depth_b).unwrap();
+        assert_eq!(c, c_check);
+    }
+
+    #[test]
+    fn transpose_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let c_check = vec![1, 4, 7, 2, 5, 8, 3, 6, 9];
+        let c = transpose(a, width_a, depth_a);
+        assert_eq!(c, c_check);
+    }
+
+    #[test]
+    fn multiply_test() {
+        let a = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let width_a = 3;
+        let depth_a = 3;
+        let b = vec![7, 8, 9, 5, 6, 4, 3, 1, 2];
+        let width_b = 3;
+        let depth_b = 3;
+        let c_check = vec![-6, -6, -6, -1, -1, 2, 4, 7, 7];
+        let c = matrix_subtraction(a, b, width_a, depth_a, width_b, depth_b).unwrap();
+        assert_eq!(c, c_check);
+
+    }
+
+    #[test]
+    fn identity_test() {
+        let width_a = 3;
+        let c_check = vec![1, 0, 0, 0, 1, 0, 0, 0, 1];
+        let c = generate_identity(width_a);
+        assert_eq!(c, c_check);
+    }
 }
