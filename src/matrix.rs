@@ -7,6 +7,7 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, 
 
 use num_traits::{Bounded, One, Zero};
 use std::convert::{TryFrom, TryInto};
+use std::iter::Iterator;
 use std::iter::Sum;
 
 type Num = i32;
@@ -89,14 +90,21 @@ impl<T: Copy> Matrix<T> {
         Self::from_flat_vec(res, n, n).unwrap()
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = &Vec<T>> + '_ {
+    pub fn rows(&self) -> impl Iterator<Item = &Vec<T>> {
         self.elements.iter()
     }
 
-    pub fn cols(&self) -> impl Iterator<Item = &Vec<T>> + '_ {
-        let mut transpose = self.clone();
-        transpose.transpose();
-        self.elements.iter()
+    pub fn cols(&self) -> impl Iterator<Item = Box<dyn Iterator<Item = T> + '_>> + '_ {
+        let mut iter_vec = Vec::new();
+
+        for i in 0..self.cols {
+            iter_vec.push(Box::new(
+                self.elements
+                    .iter()
+                    .map(Box::new(move |row: &Vec<T>| row[i])),
+            ) as Box<dyn Iterator<Item = T>>);
+        }
+        iter_vec.into_iter()
     }
 
     pub fn add(&self, rhs: &Self) -> Result<Self, Error>
@@ -124,9 +132,7 @@ impl<T: Copy> Matrix<T> {
     where
         T: AddAssign,
     {
-        self.iter_mut().flatten().for_each(|e1| {
-            *e1 += rhs;
-        });
+        self.scalar_update_op(rhs, AddAssign::add_assign)
     }
 
     pub fn sub(&self, rhs: &Self) -> Result<Self, Error>
@@ -200,8 +206,8 @@ impl<T: Copy> Matrix<T> {
         for row in self.rows() {
             let mut row_result: Vec<T> = Vec::new();
             for col in rhs.cols() {
-                let new_row = row.iter().zip(col.iter()).map(|(&x, &y)| x * y).sum();
-                row_result.push(new_row);
+                let new_element = row.iter().zip(col.into_iter()).map(|(&x, y)| x * y).sum();
+                row_result.push(new_element);
             }
             result.push(row_result)
         }
@@ -263,7 +269,11 @@ impl<T: Copy> Matrix<T> {
         todo!()
     }
 
-    fn element_wise_arithmetic_op(&self, rhs: &Self, op: impl Fn(T, T) -> T) -> Result<Self, Error> {
+    fn element_wise_arithmetic_op(
+        &self,
+        rhs: &Self,
+        op: impl Fn(T, T) -> T,
+    ) -> Result<Self, Error> {
         self.dims_match(&rhs)?;
 
         self.iter()
@@ -294,14 +304,11 @@ impl<T: Copy> Matrix<T> {
     }
 
     fn scalar_op(&self, rhs: T, op: impl Fn(T, T) -> T) -> Self {
-        Self {
-            elements: self
-                .iter()
-                .map(|row| row.iter().map(|&e| op(e, rhs)).collect::<Vec<T>>())
-                .collect::<Vec<Vec<T>>>(),
-            rows: self.rows,
-            cols: self.cols,
-        }
+        self.iter()
+            .map(|row| row.iter().map(|&e| op(e, rhs)).collect::<Vec<T>>())
+            .collect::<Vec<Vec<T>>>()
+            .try_into()
+            .expect("Matrix is bumpy :^(")
     }
 
     fn scalar_update_op(&mut self, rhs: T, mut op: impl FnMut(&mut T, T)) {
@@ -418,7 +425,7 @@ mod tests {
 
         A.scalar_sub_assign(1);
 
-        assert_eq!(A, [[3,2], [1, 0]].into());
+        assert_eq!(A, [[3, 2], [1, 0]].into());
     }
 
     #[test]
@@ -447,12 +454,14 @@ mod tests {
 
     #[test]
     fn multiply() {
-        let m1 = Matrix::from([[1, 2], [3, 4]]);
-        let m2 = Matrix::from([[1, 3], [2, 4]]);
+        let A = Matrix::from([[1, 2], [3, 4]]);
+        let B = Matrix::from([[1, 3], [2, 4]]);
 
-        let m3 = ok!(m1.mul(&m2));
+        let C = ok!(A.mul(&B));
 
-        dbg!(m3);
+        let D: Matrix<i32> = Matrix::from([[5, 11], [11, 25]]);
+
+        assert_eq!(C, D);
     }
 
     #[test]
