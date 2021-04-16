@@ -44,8 +44,8 @@ impl<T: Copy> Matrix<T> {
         })
     }
 
-    pub fn from_array<const R: usize, const C: usize>(slice: [[T; C]; R]) -> Self {
-        let elements: Vec<Vec<T>> = Vec::from(slice)
+    pub fn from_array<const R: usize, const C: usize>(array: [[T; C]; R]) -> Self {
+        let elements: Vec<Vec<T>> = Vec::from(array)
             .iter_mut()
             .map(|&mut row| Vec::from(row))
             .collect();
@@ -103,7 +103,7 @@ impl<T: Copy> Matrix<T> {
     where
         T: Add<Output = T>,
     {
-        self.element_wise_arith_op(rhs, Add::add)
+        self.element_wise_arithmetic_op(rhs, Add::add)
     }
 
     pub fn add_assign(&mut self, rhs: &Self) -> Result<(), Error>
@@ -133,7 +133,7 @@ impl<T: Copy> Matrix<T> {
     where
         T: Sub<Output = T>,
     {
-        self.element_wise_arith_op(rhs, std::ops::Sub::sub)
+        self.element_wise_arithmetic_op(rhs, std::ops::Sub::sub)
     }
 
     pub fn sub_assign(&mut self, rhs: &Self) -> Result<(), Error>
@@ -189,7 +189,7 @@ impl<T: Copy> Matrix<T> {
     where
         T: Mul<Output = T>,
     {
-        self.element_wise_arith_op(rhs, Mul::mul)
+        self.element_wise_arithmetic_op(rhs, Mul::mul)
     }
 
     pub fn mul(&self, rhs: &Self) -> Result<Self, Error>
@@ -263,7 +263,7 @@ impl<T: Copy> Matrix<T> {
         todo!()
     }
 
-    fn element_wise_arith_op(&self, rhs: &Self, op: impl Fn(T, T) -> T) -> Result<Self, Error> {
+    fn element_wise_arithmetic_op(&self, rhs: &Self, op: impl Fn(T, T) -> T) -> Result<Self, Error> {
         self.dims_match(&rhs)?;
 
         self.iter()
@@ -401,6 +401,24 @@ mod tests {
         let D = C.scalar_add(scalar);
 
         assert_eq!(D, E);
+    }
+
+    #[test]
+    fn subtraction() {
+        let mut A = Matrix::from([[5, 5], [5, 5]]);
+        let B = Matrix::from([[1, 2], [3, 4]]);
+
+        let C = ok!(A.sub(&B));
+
+        assert_eq!(C, [[4, 3], [2, 1]].into());
+
+        ok!(A.sub_assign(&B));
+
+        assert_eq!(A, C);
+
+        A.scalar_sub_assign(1);
+
+        assert_eq!(A, [[3,2], [1, 0]].into());
     }
 
     #[test]
